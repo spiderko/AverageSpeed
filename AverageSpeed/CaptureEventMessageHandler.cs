@@ -32,10 +32,12 @@ namespace AverageSpeed
 
             var journeyId = $"{message.RoadId}:{message.Vehicle.Registration}";
 
+            VehicleJourney journey;
+
             await _lock.WaitAsync().ConfigureAwait(false);
             try
             {
-                var journey = await _journeyRepository.GetById(journeyId).ConfigureAwait(false);
+                journey = await _journeyRepository.GetById(journeyId).ConfigureAwait(false);
                 if (journey == null)
                 {
                     journey = new VehicleJourney(journeyId, message.RoadId, message.Vehicle);
@@ -54,8 +56,7 @@ namespace AverageSpeed
                 _lock.Release();
             }
 
-            var journey2 = await _journeyRepository.GetById(journeyId).ConfigureAwait(false);
-            var events = journey2.CaptureEvents
+            var events = journey.CaptureEvents
                 .OrderBy(e => e.CameraPosition)
                 .ToList();
 
@@ -75,7 +76,7 @@ namespace AverageSpeed
                     maxSpeed = speed;
             }
 
-            var vehicle = journey2.Vehicle;
+            var vehicle = journey.Vehicle;
             var speedLimit = road.SpeedLimitMph ?? (road.DualCarriageway
                 ? vehicle.NationalDualCarriagewayLimit
                 : vehicle.NationalSingleCarriagewayLimit);
