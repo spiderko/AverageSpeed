@@ -35,6 +35,7 @@ namespace AverageSpeed
             var journeyLock = _locks.GetOrAdd(journeyId, _ => new SemaphoreSlim(1, 1));
 
             VehicleJourney journey;
+            bool journeyComplete;
 
             await journeyLock.WaitAsync().ConfigureAwait(false);
             try
@@ -46,16 +47,25 @@ namespace AverageSpeed
                 }
 
                 journey.CaptureEvents.Add((message.CameraPosition, message.EventTime));
-                await _journeyRepository.Upsert(journey).ConfigureAwait(false);
+                journeyComplete = journey.CaptureEvents.Count >= road.Cameras.Count;
 
-                if (journey.CaptureEvents.Count < road.Cameras.Count)
+                if (journeyComplete)
                 {
-                    return;
+                    await _journeyRepository.Delete(journeyId).ConfigureAwait(false);
+                }
+                else
+                {
+                    await _journeyRepository.Upsert(journey).ConfigureAwait(false);
                 }
             }
             finally
             {
                 journeyLock.Release();
+            }
+
+            if (!journeyComplete)
+            {
+                return;
             }
 
             var events = journey.CaptureEvents
@@ -104,8 +114,6 @@ namespace AverageSpeed
                 ExceededLimit = roundedMaxSpeed >= limitWithTolerance,
                 VehicleCheckPassed = vehicleCheckPassed
             }).ConfigureAwait(false);
-
-            await _journeyRepository.Delete(journeyId).ConfigureAwait(false);
         }
     }
 }
