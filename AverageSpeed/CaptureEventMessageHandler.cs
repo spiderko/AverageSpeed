@@ -1,6 +1,7 @@
 namespace AverageSpeed
 {
     using System;
+    using System.Collections.Concurrent;
     using System.Linq;
     using System.Threading;
     using System.Threading.Tasks;
@@ -14,7 +15,7 @@ namespace AverageSpeed
         private readonly IRepository<Road> _roadRepository;
         private readonly IRepository<VehicleJourney> _journeyRepository;
         private readonly IVehicleChecker _vehicleChecker;
-        private static readonly SemaphoreSlim _lock = new SemaphoreSlim(1, 1);
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new ConcurrentDictionary<string, SemaphoreSlim>();
 
         public CaptureEventMessageHandler(
             IRepository<Road> roadRepository,
@@ -31,10 +32,11 @@ namespace AverageSpeed
             var road = await _roadRepository.GetById(message.RoadId).ConfigureAwait(false);
 
             var journeyId = $"{message.RoadId}:{message.Vehicle.Registration}";
+            var journeyLock = _locks.GetOrAdd(journeyId, _ => new SemaphoreSlim(1, 1));
 
             VehicleJourney journey;
 
-            await _lock.WaitAsync().ConfigureAwait(false);
+            await journeyLock.WaitAsync().ConfigureAwait(false);
             try
             {
                 journey = await _journeyRepository.GetById(journeyId).ConfigureAwait(false);
@@ -53,7 +55,7 @@ namespace AverageSpeed
             }
             finally
             {
-                _lock.Release();
+                journeyLock.Release();
             }
 
             var events = journey.CaptureEvents
